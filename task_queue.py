@@ -1,5 +1,6 @@
 import asyncio
 from typing import Coroutine, Callable, Awaitable
+from signal import signal, SIGINT, SIGTERM
 
 
 class QueueItem:
@@ -16,14 +17,16 @@ class QueueItem:
 
 
 class TaskQueue:
-    def __init__(self, size=0, workers=0):
+    def __init__(self, size=0, workers=0, timeout=None):
         self.queue = asyncio.Queue(maxsize=size)
         self.workers = workers
         self.tasks = []
+        self.timeout = timeout
+        self.kill = False
 
     def add(self, item: QueueItem):
         try:
-            self.queue.put_nowait(item)
+            self.queue.put_nowait(item) if not self.kill else ...
         except asyncio.QueueFull:
             return
 
@@ -36,11 +39,22 @@ class TaskQueue:
             except asyncio.QueueEmpty:
                 break
 
+    def sig_handle(self, sig, frame):
+        self.kill = True
+
+    async def join(self):
+        try:
+            signal(SIGINT, self.sig_handle)
+            signal(SIGTERM, self.sig_handle)
+            await asyncio.wait_for(self.queue.join(), timeout=self.timeout)
+        except TimeoutError:
+            self.kill = True
+
     async def run(self):
         workers = self.workers or self.queue.qsize()
         self.tasks.extend(asyncio.create_task(self.worker()) for _ in range(workers))
-        await self.queue.join()
-        # await self.cancel()
+        await self.join()
+        await self.cancel()
 
     async def cancel(self):
         for task in self.tasks:

@@ -18,7 +18,7 @@ class API:
     }
     models: dict[str: BaseClass | User] = {'story': Story, 'comment': Comment, 'poll': Poll, 'pollopt': PollOption,
                                            'job': Story, 'user': User}
-    task_queue = TaskQueue(size=1000)
+    task_queue = TaskQueue(size=2000, timeout=60)
 
     async def get(self, *, path: str, payload: dict = None):
         conn = http.client.HTTPSConnection('hacker-news.firebaseio.com')
@@ -37,7 +37,6 @@ class API:
         model = self.models[key]
         data = model(**data)
         await data.save(self.result['data'])
-        print(len(self.result['data']))
         self.result['ids'].add(data.id)
 
     async def get_by_id(self, *, item_id):
@@ -95,7 +94,6 @@ class API:
         s, j, t, a = await asyncio.gather(self.show_stories(), self.job_stories(), self.top_stories(),
                                           self.ask_stories())
         stories = set(s) | set(j) | set(t) | set(a)
-        print(len(stories))
         [self.task_queue.add(QueueItem(self.get_by_id, item_id=itd)) for itd in stories]
         await self.task_queue.run()
         print(len(self.result['data']))
