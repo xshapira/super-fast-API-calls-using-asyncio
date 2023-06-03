@@ -22,11 +22,11 @@ class TaskQueue:
         self.workers = workers
         self.tasks = []
         self.timeout = timeout
-        self.kill = False
+        self.stop = False
 
     def add(self, item: QueueItem):
         try:
-            self.queue.put_nowait(item) if not self.kill else ...
+            self.queue.put_nowait(item) if not self.stop else ...
         except asyncio.QueueFull:
             return
 
@@ -40,7 +40,7 @@ class TaskQueue:
                 break
 
     def sig_handle(self, sig, frame):
-        self.kill = True
+        self.stop = True
 
     async def join(self):
         try:
@@ -48,7 +48,7 @@ class TaskQueue:
             signal(SIGTERM, self.sig_handle)
             await asyncio.wait_for(self.queue.join(), timeout=self.timeout)
         except TimeoutError:
-            self.kill = True
+            self.stop = True
 
     async def run(self):
         workers = self.workers or self.queue.qsize()
